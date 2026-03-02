@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { intakeQuestions, WEBSITE_ONLY_GUARDRAIL, type IntakeAnswers } from "./questions";
 
 type GenerateScopeResponse = {
@@ -8,7 +9,13 @@ type GenerateScopeResponse = {
   error?: string;
 };
 
+type SaveScopeResponse = {
+  id?: string;
+  error?: string;
+};
+
 export function IntakeChat() {
+  const router = useRouter();
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<IntakeAnswers>({});
   const [followUp, setFollowUp] = useState("");
@@ -74,11 +81,22 @@ export function IntakeChat() {
       });
 
       const data = (await res.json()) as GenerateScopeResponse;
-      if (!res.ok) {
+      if (!res.ok || !data.scope) {
         throw new Error(data.error ?? "Failed to generate scope");
       }
 
-      setResult(JSON.stringify(data.scope, null, 2));
+      const saveRes = await fetch("/api/scope", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ intake: answers, scope: data.scope }),
+      });
+
+      const saved = (await saveRes.json()) as SaveScopeResponse;
+      if (!saveRes.ok || !saved.id) {
+        throw new Error(saved.error ?? "Failed to save scope");
+      }
+
+      router.push(`/scope/${saved.id}`);
     } catch (error) {
       setResult(String(error));
     } finally {
@@ -133,9 +151,10 @@ export function IntakeChat() {
         </label>
       ) : null}
 
-      <button className="rounded bg-black px-4 py-2 text-white" onClick={next}>
-        Next
+      <button className="rounded bg-black px-4 py-2 text-white" onClick={next} disabled={loading}>
+        {loading ? "Working..." : "Next"}
       </button>
+      {result ? <p className="text-sm text-red-600">{result}</p> : null}
     </section>
   );
 }
